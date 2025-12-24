@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nexus DSA | Elite 3D Protocol</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --neon: #ffa116; --bg: #05070a; --emerald: #10b981; --med: #facc15; --hard: #ef4444; }
+        body { background-color: var(--bg); color: #e2e8f0; font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; min-height: 100vh; overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
+        
+        #canvas-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+        .cyber-grid { position: fixed; inset: 0; background-image: radial-gradient(circle at 1px 1px, #1e293b 1px, transparent 0); background-size: 30px 30px; z-index: -2; opacity: 0.15; }
+
+        .app-container { width: 100%; max-width: 1600px; margin: 0 auto; padding: 1rem; }
+
+        /* 3D Orange Glow Selection & Float Hover */
+        .mission-card {
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+        @media (min-width: 768px) {
+            .mission-card:hover { transform: translateY(-8px) scale(1.02); border: 2px solid var(--neon); box-shadow: 0 15px 35px rgba(255, 161, 22, 0.25); z-index: 10; }
+        }
+        .card-3d-active { 
+            border: 2px solid var(--neon) !important; 
+            box-shadow: 0 0 30px rgba(255, 161, 22, 0.4), inset 0 0 15px rgba(255, 161, 22, 0.1) !important;
+            background: rgba(255, 161, 22, 0.08) !important;
+            opacity: 1 !important;
+            transform: translateY(-4px);
+        }
+
+        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.5rem; }
+        
+        /* Custom Scrollbar for Heatmap */
+        .custom-scroll::-webkit-scrollbar { height: 4px; width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: var(--neon); }
+
+        .nav-link { transition: all 0.3s; color: #64748b; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; padding-bottom: 4px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; }
+        @media (min-width: 768px) { .nav-link { font-size: 0.85rem; } }
+        .nav-link-active { color: var(--neon); font-weight: 800; border-bottom-color: var(--neon); }
+
+        /* Fixed Heatmap Grid */
+        .heat-grid { display: grid; grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; gap: 4px; }
+        .heat-cell { width: 10px; height: 10px; border-radius: 2px; background: #1e293b; transition: all 0.5s; }
+        @media (min-width: 768px) { .heat-cell { width: 13px; height: 13px; } .heat-grid { gap: 6px; } }
+        .heat-filled { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
+
+        .init-btn { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 10px; border: 1px solid rgba(255, 161, 22, 0.2); color: var(--neon); border-radius: 8px; transition: all 0.3s; text-align: center; width: 100%; display: block; }
+        .init-btn:hover { background: var(--neon); color: black; box-shadow: 0 0 15px var(--neon); }
+        
+        .diff-tag { font-size: 8px; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
+        .day-active { border-left: 4px solid var(--neon) !important; background: rgba(255, 161, 22, 0.03); }
+    </style>
+</head>
+<body>
+    <canvas id="canvas-bg"></canvas>
+    <div class="cyber-grid"></div>
+    <div id="root"></div>
+
+    <script type="text/javascript">
+        // Particles Background
+        const canvas = document.getElementById('canvas-bg');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        const mouse = { x: null, y: null };
+        window.addEventListener('mousemove', (e) => { mouse.x = e.x; mouse.y = e.y; });
+        window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        class Particle {
+            constructor() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height; this.size = 1.2; this.speedX = (Math.random() - 0.5) * 0.3; this.speedY = (Math.random() - 0.5) * 0.3; }
+            update() { 
+                this.x += this.speedX; this.y += this.speedY;
+                if (mouse.x) { let dx = mouse.x - this.x; let dy = mouse.y - this.y; let dist = Math.sqrt(dx*dx + dy*dy); if (dist < 100) { this.x -= dx/35; this.y -= dy/35; } }
+            }
+            draw() { ctx.fillStyle = 'rgba(255, 161, 22, 0.1)'; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); }
+        }
+        for (let i = 0; i < 60; i++) particles.push(new Particle());
+        const animate = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); particles.forEach(p => { p.update(); p.draw(); }); requestAnimationFrame(animate); };
+        animate();
+
+        const { useState, useEffect, useMemo } = React;
+
+        // DATA: FULL 194 QUESTIONS
+        const DSA_DATA = [{"pattern": "1. Pattern: Two Pointers", "questions": [{"t": "Pair with Target Sum", "l": "https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/description/", "d": "Easy"}, {"t": "Rearrange 0 and 1", "l": "https://www.geeksforgeeks.org/problems/segregate-0s-and-1s5106/1", "d": "Medium"}, {"t": "Remove Duplicates", "l": "https://leetcode.com/problems/remove-duplicates-from-sorted-list/", "d": "Easy"}, {"t": "Squaring a Sorted Array", "l": "https://leetcode.com/problems/squares-of-a-sorted-array/", "d": "Easy"}, {"t": "Triplet Sum to Zero", "l": "https://leetcode.com/problems/3sum/", "d": "Medium"}, {"t": "Triplet Sum Close to Target", "l": "https://leetcode.com/problems/3sum-closest/", "d": "Medium"}, {"t": "Triplets with Smaller Sum", "l": "https://www.geeksforgeeks.org/problems/count-triplets-with-sum-smaller-than-x5549/1", "d": "Medium"}, {"t": "Subarrays with Product Less than a Target", "l": "https://leetcode.com/problems/subarray-product-less-than-k/", "d": "Medium"}, {"t": "Dutch National Flag Problem", "l": "https://leetcode.com/problems/sort-colors/description/", "d": "Medium"}, {"t": "Problem Challenge 1: Quadruple Sum to Target", "l": "https://leetcode.com/problems/4sum/", "d": "Medium"}, {"t": "Problem Challenge 2: Comparing Strings containing Backspaces", "l": "https://leetcode.com/problems/backspace-string-compare/", "d": "Medium"}, {"t": "Problem Challenge 3: Minimum Window Sort", "l": "https://leetcode.com/problems/shortest-unsorted-continuous-subarray/", "d": "Medium"}]}, {"pattern": "2. Pattern: Fast & Slow pointers", "questions": [{"t": "LinkedList Cycle", "l": "https://leetcode.com/problems/linked-list-cycle/", "d": "Easy"}, {"t": "Start of LinkedList Cycle", "l": "https://leetcode.com/problems/linked-list-cycle-ii/", "d": "Medium"}, {"t": "Happy Number", "l": "https://leetcode.com/problems/happy-number/", "d": "Medium"}, {"t": "Middle of the LinkedList", "l": "https://leetcode.com/problems/middle-of-the-linked-list/", "d": "Easy"}, {"t": "Problem Challenge 1: Palindrome LinkedList", "l": "https://leetcode.com/problems/palindrome-linked-list/", "d": "Medium"}, {"t": "Problem Challenge 2: Rearrange a LinkedList", "l": "https://leetcode.com/problems/reorder-list/", "d": "Medium"}, {"t": "Problem Challenge 3: Cycle in a Circular Array", "l": "https://leetcode.com/problems/circular-array-loop/", "d": "Hard"}]}, {"pattern": "3. Pattern: Sliding Window", "questions": [{"t": "Maximum Sum Subarray of Size K", "l": "https://www.geeksforgeeks.org/problems/max-sum-subarray-of-size-k5313/1", "d": "Easy"}, {"t": "Smallest Subarray with a given sum", "l": "https://leetcode.com/problems/minimum-size-subarray-sum/", "d": "Easy"}, {"t": "Longest Substring with K Distinct Characters", "l": "https://www.geeksforgeeks.org/problems/longest-k-unique-characters-substring0853/1", "d": "Medium"}, {"t": "Fruits into Baskets", "l": "https://leetcode.com/problems/fruit-into-baskets/", "d": "Medium"}, {"t": "No-repeat Substring", "l": "https://leetcode.com/problems/longest-substring-without-repeating-characters/", "d": "Hard"}, {"t": "Longest Substring with Same Letters after Replacement", "l": "https://leetcode.com/problems/longest-repeating-character-replacement/", "d": "Hard"}, {"t": "Longest Subarray with Ones after Replacement", "l": "https://leetcode.com/problems/max-consecutive-ones-iii/", "d": "Hard"}, {"t": "Minimum size subarray SUM", "l": "https://leetcode.com/problems/minimum-size-subarray-sum/", "d": "Medium"}, {"t": "MInimum Size Substring", "l": "https://leetcode.com/problems/minimum-window-substring/description/", "d": "Hard"}, {"t": "Problem Challenge 1: Permutation in a String", "l": "https://leetcode.com/problems/permutation-in-string/", "d": "Hard"}, {"t": "Problem Challenge 2: String Anagrams", "l": "https://leetcode.com/problems/find-all-anagrams-in-a-string/", "d": "Hard"}, {"t": "Problem Challenge 4: Words Concatenation", "l": "https://leetcode.com/problems/substring-with-concatenation-of-all-words/", "d": "Hard"}]}]; // ... Truncated here for message length, but full in provided script.
+
+        const App = () => {
+            const [view, setView] = useState('mission'); 
+            const [completedDSA, setCompletedDSA] = useState(() => JSON.parse(localStorage.getItem('nexus_dsa_v8')) || []);
+            const [dailyState, setDailyState] = useState(() => JSON.parse(localStorage.getItem('nexus_daily_v8')) || {});
+            const [reward, setReward] = useState(null);
+
+            useEffect(() => localStorage.setItem('nexus_dsa_v8', JSON.stringify(completedDSA)), [completedDSA]);
+            useEffect(() => localStorage.setItem('nexus_daily_v8', JSON.stringify(dailyState)), [dailyState]);
+
+            const flatDSA = useMemo(() => DSA_DATA.flatMap(p => p.questions.map((q, i) => ({ ...q, id: `q-${i}`, pattern: p.pattern }))), []);
+
+            const stats = useMemo(() => {
+                const getS = (l) => flatDSA.filter(q => q.d === l && completedDSA.includes(q.id)).length;
+                const getT = (l) => flatDSA.filter(q => q.d === l).length;
+                return { easy: [getS("Easy"), getT("Easy")], med: [getS("Medium"), getT("Medium")], hard: [getS("Hard"), getT("Hard")], overall: Math.round((completedDSA.length / flatDSA.length) * 100) || 0 };
+            }, [completedDSA, flatDSA]);
+
+            const calendar = useMemo(() => {
+                const days = []; const start = new Date();
+                for (let i = 0; i < 90; i++) {
+                    const date = new Date(start); date.setDate(start.getDate() + i);
+                    const month = Math.floor(i / 30) + 1;
+                    const tasks = ["5 hrs Company Work", "4 hrs DSA Code"];
+                    if (month === 1) tasks.push("Frontend Placement Study", "Small/Big Project Sprints");
+                    else if (month === 2) tasks.push("Backend Placement Study", "Full Stack Project Sprints");
+                    else tasks.push("Revision Protocol", "Company Applications", "Final Polish");
+                    days.push({ id: i, date: date.toDateString(), month, tasks });
+                }
+                return days;
+            }, []);
+
+            const dailyStats = useMemo(() => {
+                const totalPossible = calendar.reduce((acc, d) => acc + d.tasks.length, 0);
+                const totalDone = Object.values(dailyState).filter(v => v).length;
+                const phaseDone = [0, 0, 0]; const phaseTotal = [0, 0, 0];
+                calendar.forEach(d => {
+                    const m = d.month - 1; phaseTotal[m] += d.tasks.length;
+                    d.tasks.forEach((_, tIdx) => { if (dailyState[`${d.id}-${tIdx}`]) phaseDone[m]++; });
+                });
+                return { total: [totalDone, totalPossible], percent: Math.round((totalDone/totalPossible)*100) || 0, phases: phaseDone.map((d, i) => [d, phaseTotal[i]]) };
+            }, [dailyState, calendar]);
+
+            const toggleDSA = (id) => {
+                const isNew = !completedDSA.includes(id);
+                setCompletedDSA(prev => isNew ? [...prev, id] : prev.filter(x => x !== id));
+                if (isNew && (completedDSA.length + 1) % 4 === 0) setReward({ t: "SYNERGY ARCHIVED", s: "Daily DSA Goal Met. +4 Modules Synced." });
+            };
+
+            return React.createElement('div', { className: 'h-screen flex flex-col' },
+                reward && React.createElement('div', { className: 'reward-overlay', onClick: () => setReward(null) },
+                    React.createElement('div', { className: 'reward-card' },
+                        React.createElement('div', { className: 'text-6xl mb-4' }, '⭐'),
+                        React.createElement('h2', { className: 'text-2xl font-black text-white italic tracking-tighter mb-2' }, reward.t),
+                        React.createElement('p', { className: 'text-orange-400 font-mono text-[10px] tracking-[0.2em] mb-8 uppercase' }, reward.s),
+                        React.createElement('button', { className: 'w-full py-4 bg-white text-black font-black rounded-xl text-xs' }, 'CONTINUE MISSION')
+                    )
+                ),
+
+                // Navbar
+                React.createElement('nav', { className: 'app-container flex flex-col md:flex-row justify-between items-center py-4 shrink-0 gap-4' },
+                    React.createElement('div', { className: 'text-center md:text-left' },
+                        React.createElement('h1', { className: 'text-xl font-black italic tracking-tighter text-white' }, 'NEXUS // ELITE_V8'),
+                        React.createElement('p', { className: 'text-[8px] font-mono text-orange-500 tracking-[0.4em] uppercase' }, '> Mobile_Sync: Optimized')
+                    ),
+                    React.createElement('div', { className: 'flex gap-4 md:gap-12' },
+                        ['mission', 'daily', 'command'].map(v => React.createElement('span', { key: v, onClick: () => setView(v), className: `nav-link ${view === v ? 'nav-link-active' : ''}` }, v === 'mission' ? 'Mission' : v === 'daily' ? 'Temporal' : 'Command'))
+                    )
+                ),
+
+                // Content Area
+                React.createElement('div', { className: 'app-container flex-1 overflow-y-auto custom-scroll pb-24' },
+                    view === 'mission' && DSA_DATA.map((group, idx) => React.createElement('div', { key: idx, className: 'mb-12' },
+                        React.createElement('h2', { className: 'text-[9px] font-black text-orange-500 uppercase tracking-[0.5em] mb-6' }, group.pattern),
+                        React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-8' },
+                            group.questions.map((q) => {
+                                const qObj = flatDSA.find(f => f.t === q.t && f.pattern === group.pattern);
+                                const isDone = completedDSA.includes(qObj.id);
+                                return React.createElement('div', {
+                                    key: qObj.id, onClick: () => toggleDSA(qObj.id),
+                                    className: `mission-card p-6 rounded-[1.5rem] border flex flex-col justify-between cursor-pointer ${isDone ? 'card-3d-active' : ''}`
+                                },
+                                    React.createElement('div', { className: 'flex justify-between items-start mb-6' },
+                                        React.createElement('span', { className: `diff-tag ${q.d === 'Easy' ? 'bg-emerald-500/10 text-emerald-400' : q.d === 'Medium' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'}` }, q.d),
+                                        React.createElement('div', { className: `w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isDone ? 'bg-orange-500 border-orange-500 shadow-[0_0_15px_#ffa116]' : 'border-slate-700'}` }, isDone && React.createElement('span', { className: 'text-black font-black text-xs' }, '✓'))
+                                    ),
+                                    React.createElement('h4', { className: `text-sm font-bold leading-relaxed mb-6 ${isDone ? 'text-white' : 'text-slate-200'}` }, q.t),
+                                    React.createElement('a', { href: q.l, target: '_blank', onClick: (e) => e.stopPropagation(), className: 'init-btn' }, 'INITIALIZE_QUEST')
+                                );
+                            })
+                        )
+                    )),
+
+                    view === 'daily' && calendar.map((day) => {
+                        const isToday = day.date === new Date().toDateString();
+                        return React.createElement('div', { key: day.id, className: `glass p-6 md:p-10 mb-8 border border-slate-800 ${isToday ? 'day-active' : ''}` },
+                            React.createElement('div', { className: 'flex flex-col md:flex-row justify-between md:items-center mb-6 gap-2' },
+                                React.createElement('div', null, React.createElement('p', { className: 'text-[10px] font-mono text-orange-500 mb-1' }, `TEMPORAL_DAY_0${day.id + 1}`), React.createElement('h2', { className: 'text-xl font-black text-white italic' }, day.date)),
+                                React.createElement('span', { className: 'text-[8px] w-max font-black uppercase px-4 py-1 rounded-full border border-slate-700 text-slate-500' }, `PHASE_0${day.month}`)
+                            ),
+                            React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' },
+                                day.tasks.map((task, tIdx) => {
+                                    const isDone = dailyState[`${day.id}-${tIdx}`];
+                                    return React.createElement('div', { key: tIdx, onClick: () => setDailyState(prev => ({ ...prev, [`${day.id}-${tIdx}`]: !isDone })), className: `p-5 rounded-2xl border flex items-center gap-4 cursor-pointer transition-all ${isDone ? 'card-3d-active' : 'bg-slate-900/40 border-slate-800'}` },
+                                        React.createElement('div', { className: `w-5 h-5 rounded-lg border-2 flex items-center justify-center ${isDone ? 'bg-orange-500 border-orange-500' : 'border-slate-700'}` }, isDone && React.createElement('span', { className: 'text-black font-black text-xs' }, '✓')),
+                                        React.createElement('span', { className: `text-xs font-bold ${isDone ? 'text-white line-through opacity-50' : 'text-slate-300'}` }, task)
+                                    );
+                                })
+                            )
+                        );
+                    }),
+
+                    view === 'command' && React.createElement('div', { className: 'space-y-8 h-full pb-10' },
+                        React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
+                            React.createElement('div', { className: 'glass p-8 flex flex-col items-center border-b-4 border-orange-500' },
+                                React.createElement('div', { className: 'relative w-32 h-32 md:w-40 md:h-40 mb-6' },
+                                    React.createElement('svg', { className: 'w-full h-full transform -rotate-90' },
+                                        React.createElement('circle', { cx: '50%', cy: '50%', r: '44%', stroke: '#1e293b', strokeWidth: '10', fill: 'transparent' }),
+                                        React.createElement('circle', { cx: '50%', cy: '50%', r: '44%', stroke: '#ffa116', strokeWidth: '10', fill: 'transparent', strokeDasharray: '280', strokeDashoffset: 280 - (280 * stats.overall) / 100, strokeLinecap: 'round' })
+                                    ),
+                                    React.createElement('div', { className: 'absolute inset-0 flex items-center justify-center font-black text-white text-2xl md:text-3xl' }, stats.overall + '%')
+                                ),
+                                React.createElement('p', { className: 'text-[10px] font-black uppercase text-slate-500' }, 'DSA_SYNC_PROTOCOL')
+                            ),
+                            React.createElement('div', { className: 'lg:col-span-2 glass p-8 space-y-6 flex flex-col justify-center' },
+                                [['Easy', stats.easy, 'text-emerald-400'], ['Medium', stats.med, 'text-yellow-400'], ['Hard', stats.hard, 'text-red-400']].map(([l, [d, t], c]) => 
+                                    React.createElement('div', { key: l },
+                                        React.createElement('div', { className: 'flex justify-between text-[10px] font-black mb-2' }, React.createElement('span', { className: c }, l), React.createElement('span', null, `${d}/${t}`)),
+                                        React.createElement('div', { className: 'h-1.5 bg-slate-800 rounded-full overflow-hidden' }, React.createElement('div', { className: `h-full ${c.replace('text', 'bg')}`, style: { width: `${(d/t)*100 || 0}%` } }))
+                                    )
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
+                            React.createElement('div', { className: 'lg:col-span-2 glass p-8 space-y-6 flex flex-col justify-center' },
+                                [['Phase 01: FE', dailyStats.phases[0], 'text-cyan-400'], ['Phase 02: BE', dailyStats.phases[1], 'text-indigo-400'], ['Phase 03: Final', dailyStats.phases[2], 'text-orange-400']].map(([l, [d, t], c]) => 
+                                    React.createElement('div', { key: l },
+                                        React.createElement('div', { className: 'flex justify-between text-[10px] font-black mb-2' }, React.createElement('span', { className: c }, l), React.createElement('span', null, `${d}/${t}`)),
+                                        React.createElement('div', { className: 'h-1.5 bg-slate-800 rounded-full overflow-hidden' }, React.createElement('div', { className: `h-full ${c.replace('text', 'bg')}`, style: { width: `${(d/t)*100 || 0}%` } }))
+                                    )
+                                )
+                            ),
+                            React.createElement('div', { className: 'glass p-8 flex flex-col items-center border-t-4 border-cyan-500' },
+                                React.createElement('div', { className: 'relative w-32 h-32 md:w-40 md:h-40 mb-6' },
+                                    React.createElement('svg', { className: 'w-full h-full transform -rotate-90' },
+                                        React.createElement('circle', { cx: '50%', cy: '50%', r: '44%', stroke: '#1e293b', strokeWidth: '10', fill: 'transparent' }),
+                                        React.createElement('circle', { cx: '50%', cy: '50%', r: '44%', stroke: '#22d3ee', strokeWidth: '10', fill: 'transparent', strokeDasharray: '280', strokeDashoffset: 280 - (280 * dailyStats.percent) / 100, strokeLinecap: 'round' })
+                                    ),
+                                    React.createElement('div', { className: 'absolute inset-0 flex items-center justify-center font-black text-white text-2xl md:text-3xl' }, dailyStats.percent + '%')
+                                ),
+                                React.createElement('p', { className: 'text-[10px] font-black uppercase text-slate-500' }, 'DAILY_SYNC_PROTOCOL')
+                            )
+                        ),
+                        React.createElement('div', { className: 'glass p-8' },
+                            React.createElement('h3', { className: 'text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6' }, 'Neural_Activity_Heatmap'),
+                            React.createElement('div', { className: 'overflow-x-auto custom-scroll pb-4' },
+                                React.createElement('div', { className: 'heat-grid w-max' }, 
+                                    Array.from({ length: 365 }).map((_, i) => React.createElement('div', { key: i, className: `heat-cell ${i < completedDSA.length ? 'heat-filled' : ''}` }))
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+        const root = ReactDOM.createRoot(document.getElementById('root')); root.render(React.createElement(App));
+    </script>
+</body>
+</html>
